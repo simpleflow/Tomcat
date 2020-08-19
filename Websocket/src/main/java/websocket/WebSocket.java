@@ -9,20 +9,21 @@ import javax.websocket.server.ServerEndpoint;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 
-@ServerEndpoint("/{username}/{action}/{unid}")
+@ServerEndpoint("/{username}/{action}/{unid}/{client}")
 public class WebSocket {
 
     private static int onlineCount = 0;
     //private static Map<String, WebSocket> clients = new ConcurrentHashMap<String, WebSocket>();
-    private static Map<String, Session> clients = new ConcurrentHashMap<String, Session>();
+    private static Map<String, Session> sessionlist = new ConcurrentHashMap<String, Session>();
     //编辑的unid以及对应的session
-    private static Map<String, Session> editlist = new ConcurrentHashMap<String, Session>();
+    private static Map<String, WebSocket> editlist = new ConcurrentHashMap<String, WebSocket>();
 
     private Session session;
     private String username;
     private String unid;
     private String action;   //read edit
     private String lockunid;
+    private String client;    //client type  微信  IE  firefox chrome等
 
     /*
         场景:
@@ -42,12 +43,14 @@ public class WebSocket {
         }
          */
     @OnOpen
-    public void onOpen(@PathParam("action") String action,@PathParam("username") String username,@PathParam("unid") String unid, Session session) throws IOException {
+    public void onOpen(@PathParam("action") String action,@PathParam("username") String username,@PathParam("client") String client,
+                       @PathParam("unid") String unid, Session session) throws IOException {
 
         this.username = username;
         this.session = session;
         this.unid = unid;
         this.action = action;
+        this.client = client;
 
 
         JSONObject result = new JSONObject();
@@ -61,42 +64,45 @@ public class WebSocket {
 
         }else if (action.equals("edit")){
             if (editlist.containsKey(unid)){
-                result.put("status","-1");
+                result.put("status","-1");  //已被锁定
+                result.put("editors",editlist.get(unid).username);
+                result.put("client",editlist.get(unid).client);
 
             }else{
                 //如果此unid还未锁定,则占用此锁
                 this.lockunid = unid;
-                editlist.put(unid,session);
+                System.out.println("锁定:"+this.lockunid+" - "+this.username+" "+this.client);
+                editlist.put(unid,this);
+
                 result.put("status","1");
             }
 
         }
-
-
         //onOpen时记录所有session清单
-        clients.put(session.getId(), session);
+        sessionlist.put(session.getId(), session);
 
         session.getAsyncRemote().sendText(result.toJSONString());
-        System.out.println("已连接 - "+session.getId()+" "+username+" counts:"+getOnlineCount()+" clients"+clients.size());
+        System.out.println(result.toJSONString());
+        System.out.println("已连接 - "+session.getId()+" "+username+" counts:"+getOnlineCount()+" sessions:"+sessionlist.size());
     }
 
     @OnClose
     public void onClose() throws IOException {
-        System.out.println(this.lockunid);
 
         if (this.lockunid !=null) {
+            System.out.println("解锁:"+this.lockunid+" - "+this.username);
             editlist.remove(this.lockunid);
         }
-        clients.remove(this.session.getId());
+        sessionlist.remove(this.session.getId());
         subOnlineCount();
-        System.out.println("已断开 - "+this.session.getId()+" "+this.lockunid+" "+this.username+" counts:"+getOnlineCount()+" clients"+clients.size());
+        System.out.println("已断开 - "+this.session.getId()+" "+this.lockunid+" "+this.username+" counts:"+getOnlineCount()+" sessions:"+sessionlist.size());
         //System.out.println("已断开 - "+this.username+" counts:"+getOnlineCount()+"clients"+clients.size());
     }
 
     @OnMessage
     public void onMessage(String msg,Session session) throws IOException {
 
-        System.out.println("接收到 - "+session.getId()+" "+this.username+" counts:"+getOnlineCount()+" clients"+clients.size());
+        System.out.println("接收到 - "+session.getId()+" "+this.username+" counts:"+getOnlineCount()+" sessions:"+sessionlist.size());
         JSONObject result = new JSONObject();
         JSONObject json = JSON.parseObject(msg);
 
@@ -152,7 +158,7 @@ public class WebSocket {
         WebSocket.onlineCount--;
     }
 
-    public static synchronized Map<String, Session> getClients() {
-        return clients;
+    public static synchronized Map<String, Session> getSessionlist() {
+        return sessionlist;
     }
 }
