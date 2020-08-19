@@ -32,6 +32,8 @@ public class WebSocket {
                     如何找到原来编辑的那个session发消息转至read状态
                     原来的页面ping时,发面同一个unid,已经有新的session锁定了  怎么判断 同一个用户,同一个unid?
             同一个人多次打开读同一个文档时, 允许多次打开
+
+            如果锁定超过30分钟,是否需要自动解锁,并将用户T下线,转入查看模式?  后续再看
      */
  /*
         result json
