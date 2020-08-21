@@ -17,6 +17,8 @@ public class WebSocket {
     private static Map<String, Session> sessionlist = new ConcurrentHashMap<String, Session>();
     //编辑的unid以及对应的session
     private static Map<String, WebSocket> editlist = new ConcurrentHashMap<String, WebSocket>();
+    //编辑的unid以及对应的session
+    private static Map<String, WebSocket> readlist = new ConcurrentHashMap<String, WebSocket>();
 
     private Session session;
     private String username;
@@ -42,6 +44,7 @@ public class WebSocket {
          to:       消息发送给(从客户端传过来) 这里应该可以不用
          readers:  当前页面的当前读者
          editors:  当前页面的编辑者,锁定者
+         client:   锁定者的客户端类型
         }
          */
     @OnOpen
@@ -63,12 +66,25 @@ public class WebSocket {
             result.put("status","0");
             //此处返回读者清单
             //此处返回编辑者清单
+            if(editlist.get(unid)!=null){
+                result.put("editors",editlist.get(unid).username);
+                result.put("client",editlist.get(unid).client);
+            }else{
+                result.put("editors","");
+                result.put("client","");
+            }
+
 
         }else if (action.equals("edit")){
             if (editlist.containsKey(unid)){
                 result.put("status","-1");  //已被锁定
-                result.put("editors",editlist.get(unid).username);
-                result.put("client",editlist.get(unid).client);
+                if(editlist.get(unid)!=null){
+                    result.put("editors",editlist.get(unid).username);
+                    result.put("client",editlist.get(unid).client);
+                }else{
+                    result.put("editors","");
+                    result.put("client","");
+                }
 
             }else{
                 //如果此unid还未锁定,则占用此锁
@@ -76,6 +92,9 @@ public class WebSocket {
                 System.out.println("锁定:"+this.lockunid+" - "+this.username+" "+this.client);
                 editlist.put(unid,this);
 
+                //占用编辑锁时,不再返回当前编辑者
+                result.put("editors","");
+                result.put("client","");
                 result.put("status","1");
             }
 
@@ -104,12 +123,25 @@ public class WebSocket {
     @OnMessage
     public void onMessage(String msg,Session session) throws IOException {
 
-        System.out.println("接收到 - "+session.getId()+" "+this.username+" counts:"+getOnlineCount()+" sessions:"+sessionlist.size());
+        System.out.println("接收到 - "+session.getId()+" "+this.username+" counts:"+getOnlineCount()+" sessions:"+sessionlist.size()+" "+msg);
         JSONObject result = new JSONObject();
         JSONObject json = JSON.parseObject(msg);
 
+        result.put("status","0");  //只有建立连接时,才判断是否要锁定,onmessage时,连接已经建立,锁资源已经处理
+        result.put("editors","");
+        result.put("client","");
 
-        session.getAsyncRemote().sendText(json.toJSONString());
+        if(editlist.get(unid)!=null){
+            result.put("debug","editlist not null"+json.getString("action"));
+            if(!json.getString("action").equals("edit")){
+                //如果当前就是编辑状态,则不再回传当前编辑人
+                result.put("editors",editlist.get(unid).username);
+                result.put("client",editlist.get(unid).client);
+            }
+        }
+
+
+        session.getAsyncRemote().sendText(result.toJSONString());
         /*
         if (!jsonTo.get("To").equals("All")){
             sendMessageTo("给一个人", jsonTo.get("To").toString());
