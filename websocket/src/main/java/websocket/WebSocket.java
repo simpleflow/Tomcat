@@ -18,7 +18,11 @@ public class WebSocket {
     //编辑的unid以及对应的session
     private static Map<String, WebSocket> editlist = new ConcurrentHashMap<String, WebSocket>();
     //编辑的unid以及对应的session
-    private static Map<String, WebSocket> readlist = new ConcurrentHashMap<String, WebSocket>();
+    //private static Map<String, WebSocket> readlist = new ConcurrentHashMap<String, WebSocket>();
+
+    private static Map<String,Map<String, String>> readlist = new ConcurrentHashMap<String,Map<String, String>>();
+    private Map<String, String> readmap;
+    //private Map<String, String> readmap = new ConcurrentHashMap<String,String>();
 
     private Session session;
     private String username;
@@ -57,14 +61,36 @@ public class WebSocket {
         this.action = action;
         this.client = client;
 
-
-        JSONObject result = new JSONObject();
-
+               JSONObject result = new JSONObject();
         addOnlineCount();
+
+        //返回读者清单
+        String tmpreader = "";
+        //取得页面已有读者清单
+        readmap = readlist.get(unid);
+        System.out.println(readmap);
+        if (readmap != null) {
+            for(Map.Entry<String, String> entry : readmap.entrySet()){
+                if(!entry.getKey().equals(session.getId())){
+                    tmpreader = tmpreader + " "+ entry.getValue();
+                }
+            }
+        }
+        result.put("readers",tmpreader);
 
         if (action.equals("read")){
             result.put("status","0");
-            //此处返回读者清单
+            //更新页面的读者清单
+            readmap = readlist.get(unid);
+            if (readmap != null) {
+                readmap.put(session.getId(), username + "(" + client + ")");
+            }else{
+                readmap = new ConcurrentHashMap<String,String>();
+                readmap.put(session.getId(), username + "(" + client + ")");
+            }
+            readlist.put(unid,readmap);
+
+
             //此处返回编辑者清单
             if(editlist.get(unid)!=null){
                 result.put("editors",editlist.get(unid).username);
@@ -73,6 +99,7 @@ public class WebSocket {
                 result.put("editors","");
                 result.put("client","");
             }
+            //读清单
 
 
         }else if (action.equals("edit")){
@@ -99,6 +126,9 @@ public class WebSocket {
             }
 
         }
+
+
+
         //onOpen时记录所有session清单
         sessionlist.put(session.getId(), session);
 
@@ -115,6 +145,12 @@ public class WebSocket {
             editlist.remove(this.lockunid);
         }
         sessionlist.remove(this.session.getId());
+        //清除读者清单中的session
+        readmap = readlist.get(unid);
+        if (readmap != null) {
+            readmap.remove(this.session.getId());
+        }
+
         subOnlineCount();
         System.out.println("已断开 - "+this.session.getId()+" "+this.lockunid+" "+this.username+" counts:"+getOnlineCount()+" sessions:"+sessionlist.size());
         //System.out.println("已断开 - "+this.username+" counts:"+getOnlineCount()+"clients"+clients.size());
@@ -126,6 +162,25 @@ public class WebSocket {
         System.out.println("接收到 - "+session.getId()+" "+this.username+" counts:"+getOnlineCount()+" sessions:"+sessionlist.size()+" "+msg);
         JSONObject result = new JSONObject();
         JSONObject json = JSON.parseObject(msg);
+
+        String tmpreader = "";
+        //取得页面已有读者清单
+        readmap = readlist.get(unid);
+        System.out.println(readmap);
+        if (readmap != null) {
+            for(Map.Entry<String, String> entry : readmap.entrySet()){
+                if(!entry.getKey().equals(session.getId())){
+                    tmpreader = tmpreader + " "+ entry.getValue();
+                }
+            }
+        }
+
+        /*
+        {0=张兆山(firefox), 1=陆永华(chrome), 2=陆永华(firefox)}
+ 陆永华(firefox) 陆永华(firefox)
+         */
+        System.out.println(tmpreader);
+        result.put("readers",tmpreader);
 
         result.put("status","0");  //只有建立连接时,才判断是否要锁定,onmessage时,连接已经建立,锁资源已经处理
         result.put("editors","");
