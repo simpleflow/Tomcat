@@ -7,6 +7,7 @@ import javax.websocket.*;
 import javax.websocket.server.PathParam;
 import javax.websocket.server.ServerEndpoint;
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 
 @ServerEndpoint("/{username}/{action}/{unid}/{client}")
@@ -44,11 +45,13 @@ public class WebSocket {
  /*
         result json
         {status:   1 regist   2 renew  3 grab  -1 locked  0 read
-         msg:      regist  renew  grab  locked read
+         //msg:      regist  renew  grab  locked read
          to:       消息发送给(从客户端传过来) 这里应该可以不用
          readers:  当前页面的当前读者
          editors:  当前页面的编辑者,锁定者
          client:   锁定者的客户端类型
+         allreaders: 系统所有的读者清单及查看的资源  []
+         alleditors:  系统所有正在编辑的人员清单及锁定的资源
         }
          */
     @OnOpen
@@ -61,7 +64,7 @@ public class WebSocket {
         this.action = action;
         this.client = client;
 
-               JSONObject result = new JSONObject();
+        JSONObject result = new JSONObject();
         addOnlineCount();
 
         //返回读者清单
@@ -123,6 +126,23 @@ public class WebSocket {
                 result.put("editors","");
                 result.put("client","");
                 result.put("status","1");
+            }
+
+        }else if (action.equals("getlist")){
+            //管理端查看所有清单，写在onopen里 前端得到数据后 直接关闭websocket
+            if (readlist != null) {
+                JSONArray jsonArray = new JSONArray();
+                JSONObject obj;
+                for(Map.Entry<String,Map<String, String>>map:readlist.entrySet()){
+                    Map<String, String> tmpmap = map.getValue();
+                    for(Map.Entry<String, String> entry: tmpmap.entrySet()){
+                        obj = new JSONObject();
+                        obj.put("unid",map.getKey());
+                        obj.put("user",entry.getValue());
+                        jsonArray.add(obj);
+                    }
+                }
+                result.put("allreaders",jsonArray);
             }
 
         }
